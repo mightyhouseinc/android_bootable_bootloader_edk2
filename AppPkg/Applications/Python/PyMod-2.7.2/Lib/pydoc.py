@@ -96,7 +96,7 @@ def classname(object, modname):
     """Get a class name and qualify it with a module name if necessary."""
     name = object.__name__
     if object.__module__ != modname:
-        name = object.__module__ + '.' + name
+        name = f'{object.__module__}.{name}'
     return name
 
 def isdata(object):
@@ -117,7 +117,7 @@ def cram(text, maxlen):
     if len(text) > maxlen:
         pre = max(0, (maxlen-3)//2)
         post = max(0, maxlen-3-pre)
-        return text[:pre] + '...' + text[len(text)-post:]
+        return f'{text[:pre]}...{text[len(text) - post:]}'
     return text
 
 _re_stripid = re.compile(r' at 0x[0-9a-f]{6,16}(>+)$', re.IGNORECASE)
@@ -130,12 +130,10 @@ def _is_some_method(obj):
     return inspect.ismethod(obj) or inspect.ismethoddescriptor(obj)
 
 def allmethods(cl):
-    methods = {}
-    for key, value in inspect.getmembers(cl, _is_some_method):
-        methods[key] = 1
+    methods = {key: 1 for key, value in inspect.getmembers(cl, _is_some_method)}
     for base in cl.__bases__:
         methods.update(allmethods(base)) # all your base are belong to us
-    for key in methods.keys():
+    for key in methods:
         methods[key] = getattr(cl, key)
     return methods
 
@@ -167,11 +165,7 @@ def visiblename(name, all=None, obj=None):
     # Namedtuples have public fields and methods with a single leading underscore
     if name.startswith('_') and hasattr(obj, '_fields'):
         return 1
-    if all is not None:
-        # only document that which the programmer exported in __all__
-        return name in all
-    else:
-        return not name.startswith('_')
+    return name in all if all is not None else not name.startswith('_')
 
 def classify_class_attrs(object):
     """Wrap inspect.classify_class_attrs, with fixup for data descriptors."""
@@ -188,7 +182,7 @@ def ispackage(path):
     """Guess whether a path refers to a package directory."""
     if os.path.isdir(path):
         for ext in ('.py', '.pyc', '.pyo'):
-            if os.path.isfile(os.path.join(path, '__init__' + ext)):
+            if os.path.isfile(os.path.join(path, f'__init__{ext}')):
                 return True
     return False
 
@@ -199,15 +193,14 @@ def source_synopsis(file):
         if not line: break
     line = strip(line)
     if line[:4] == 'r"""': line = line[1:]
-    if line[:3] == '"""':
-        line = line[3:]
-        if line[-1:] == '\\': line = line[:-1]
-        while not strip(line):
-            line = file.readline()
-            if not line: break
-        result = strip(split(line, '"""')[0])
-    else: result = None
-    return result
+    if line[:3] != '"""':
+        return None
+    line = line[3:]
+    if line[-1:] == '\\': line = line[:-1]
+    while not strip(line):
+        line = file.readline()
+        if not line: break
+    return strip(split(line, '"""')[0])
 
 def synopsis(filename, cache={}):
     """Get the one-line summary out of a module file."""
@@ -244,25 +237,20 @@ class ErrorDuringImport(Exception):
         exc = self.exc
         if type(exc) is types.ClassType:
             exc = exc.__name__
-        return 'problem in %s - %s: %s' % (self.filename, exc, self.value)
+        return f'problem in {self.filename} - {exc}: {self.value}'
 
 def importfile(path):
     """Import a Python source file or compiled file given its path."""
     magic = imp.get_magic()
-    file = open(path, 'r')
-    if file.read(len(magic)) == magic:
-        kind = imp.PY_COMPILED
-    else:
-        kind = imp.PY_SOURCE
-    file.close()
+    with open(path, 'r') as file:
+        kind = imp.PY_COMPILED if file.read(len(magic)) == magic else imp.PY_SOURCE
     filename = os.path.basename(path)
     name, ext = os.path.splitext(filename)
-    file = open(path, 'r')
-    try:
-        module = imp.load_module(name, file, path, (ext, 'r', kind))
-    except:
-        raise ErrorDuringImport(path, sys.exc_info())
-    file.close()
+    with open(path, 'r') as file:
+        try:
+            module = imp.load_module(name, file, path, (ext, 'r', kind))
+        except:
+            raise ErrorDuringImport(path, sys.exc_info())
     return module
 
 def safeimport(path, forceload=0, cache={}):
@@ -286,7 +274,7 @@ def safeimport(path, forceload=0, cache={}):
                 # module from sys.modules and re-import.  Also remove any
                 # submodules because they won't appear in the newly loaded
                 # module's namespace if they're already in sys.modules.
-                subs = [m for m in sys.modules if m.startswith(path + '.')]
+                subs = [m for m in sys.modules if m.startswith(f'{path}.')]
                 for key in [path] + subs:
                     # Prevent garbage collection.
                     cache[key] = sys.modules[key]
@@ -336,8 +324,7 @@ class Doc:
 
     def fail(self, object, name=None, *args):
         """Raise an exception for unimplemented types."""
-        message = "don't know how to document object%s of type %s" % (
-            name and ' ' + repr(name), type(object).__name__)
+        message = f"don't know how to document object{name and f' {repr(name)}'} of type {type(object).__name__}"
         raise TypeError, message
 
     docmodule = docclass = docroutine = docother = docproperty = docdata = fail
@@ -352,8 +339,7 @@ class Doc:
 
         docloc = os.environ.get("PYTHONDOCS",
                                 "http://docs.python.org/library")
-        basedir = os.path.join(sys.exec_prefix, "lib",
-                               "python"+sys.version[0:3])
+        basedir = os.path.join(sys.exec_prefix, "lib", f"python{sys.version[:3]}")
         if (isinstance(object, type(os)) and
             (object.__name__ in ('errno', 'exceptions', 'gc', 'imp',
                                  'marshal', 'posix', 'signal', 'sys',
@@ -362,9 +348,9 @@ class Doc:
               not file.startswith(os.path.join(basedir, 'site-packages')))) and
             object.__name__ not in ('xml.etree', 'test.pydoc_mod')):
             if docloc.startswith("http://"):
-                docloc = "%s/%s" % (docloc.rstrip("/"), object.__name__)
+                docloc = f'{docloc.rstrip("/")}/{object.__name__}'
             else:
-                docloc = os.path.join(docloc, object.__name__ + ".html")
+                docloc = os.path.join(docloc, f"{object.__name__}.html")
         else:
             docloc = None
         return docloc
@@ -398,7 +384,7 @@ class HTMLRepr(Repr):
         if '\\' in test and '\\' not in replace(testrepr, r'\\', ''):
             # Backslashes are only literal in the string and are never
             # needed to make any special characters, so show a raw string.
-            return 'r' + testrepr[0] + self.escape(test) + testrepr[0]
+            return f'r{testrepr[0]}{self.escape(test)}{testrepr[0]}'
         return re.sub(r'((\\[\\abfnrtv\'"]|\\[0-9]..|\\x..|\\u....)+)',
                       r'<font color="#c040c0">\1</font>',
                       self.escape(testrepr))
@@ -409,7 +395,7 @@ class HTMLRepr(Repr):
         try:
             return self.escape(cram(stripid(repr(x)), self.maxstring))
         except:
-            return self.escape('<%s instance>' % x.__class__.__name__)
+            return self.escape(f'<{x.__class__.__name__} instance>')
 
     repr_unicode = repr_string
 
@@ -466,7 +452,7 @@ class HTMLDoc(Doc):
 
     def bigsection(self, title, *args):
         """Format a section with a big heading."""
-        title = '<big><strong>%s</strong></big>' % title
+        title = f'<big><strong>{title}</strong></big>'
         return self.section(title, *args)
 
     def preformat(self, text):
@@ -484,44 +470,38 @@ class HTMLDoc(Doc):
             for i in range(rows*col, rows*col+rows):
                 if i < len(list):
                     result = result + format(list[i]) + '<br>\n'
-            result = result + '</td>'
+            result = f'{result}</td>'
         return '<table width="100%%" summary="list"><tr>%s</tr></table>' % result
 
-    def grey(self, text): return '<font color="#909090">%s</font>' % text
+    def grey(self, text):
+        return f'<font color="#909090">{text}</font>'
 
     def namelink(self, name, *dicts):
         """Make a link for an identifier, given name-to-URL mappings."""
         for dict in dicts:
             if name in dict:
-                return '<a href="%s">%s</a>' % (dict[name], name)
+                return f'<a href="{dict[name]}">{name}</a>'
         return name
 
     def classlink(self, object, modname):
         """Make a link for a class."""
         name, module = object.__name__, sys.modules.get(object.__module__)
         if hasattr(module, name) and getattr(module, name) is object:
-            return '<a href="%s.html#%s">%s</a>' % (
-                module.__name__, name, classname(object, modname))
+            return f'<a href="{module.__name__}.html#{name}">{classname(object, modname)}</a>'
         return classname(object, modname)
 
     def modulelink(self, object):
         """Make a link for a module."""
-        return '<a href="%s.html">%s</a>' % (object.__name__, object.__name__)
+        return f'<a href="{object.__name__}.html">{object.__name__}</a>'
 
     def modpkglink(self, data):
         """Make a link for a module or package to display in an index."""
         name, path, ispackage, shadowed = data
         if shadowed:
             return self.grey(name)
-        if path:
-            url = '%s.%s.html' % (path, name)
-        else:
-            url = '%s.html' % name
-        if ispackage:
-            text = '<strong>%s</strong>&nbsp;(package)' % name
-        else:
-            text = name
-        return '<a href="%s">%s</a>' % (url, text)
+        url = f'{path}.{name}.html' if path else f'{name}.html'
+        text = f'<strong>{name}</strong>&nbsp;(package)' if ispackage else name
+        return f'<a href="{url}">{text}</a>'
 
     def markup(self, text, escape=None, funcs={}, classes={}, methods={}):
         """Mark up some plain text, given a context of symbols to look for.
@@ -542,17 +522,17 @@ class HTMLDoc(Doc):
             all, scheme, rfc, pep, selfdot, name = match.groups()
             if scheme:
                 url = escape(all).replace('"', '&quot;')
-                results.append('<a href="%s">%s</a>' % (url, url))
+                results.append(f'<a href="{url}">{url}</a>')
             elif rfc:
                 url = 'http://www.rfc-editor.org/rfc/rfc%d.txt' % int(rfc)
-                results.append('<a href="%s">%s</a>' % (url, escape(all)))
+                results.append(f'<a href="{url}">{escape(all)}</a>')
             elif pep:
                 url = 'http://www.python.org/dev/peps/pep-%04d/' % int(pep)
-                results.append('<a href="%s">%s</a>' % (url, escape(all)))
+                results.append(f'<a href="{url}">{escape(all)}</a>')
             elif text[end:end+1] == '(':
                 results.append(self.namelink(name, methods, funcs, classes))
             elif selfdot:
-                results.append('self.<strong>%s</strong>' % name)
+                results.append(f'self.<strong>{name}</strong>')
             else:
                 results.append(self.namelink(name, classes))
             here = end
@@ -567,13 +547,11 @@ class HTMLDoc(Doc):
         for entry in tree:
             if type(entry) is type(()):
                 c, bases = entry
-                result = result + '<dt><font face="helvetica, arial">'
+                result = f'{result}<dt><font face="helvetica, arial">'
                 result = result + self.classlink(c, modname)
                 if bases and bases != (parent,):
-                    parents = []
-                    for base in bases:
-                        parents.append(self.classlink(base, modname))
-                    result = result + '(' + join(parents, ', ') + ')'
+                    parents = [self.classlink(base, modname) for base in bases]
+                    result = f'{result}(' + join(parents, ', ') + ')'
                 result = result + '\n</font></dt>'
             elif type(entry) is type([]):
                 result = result + '<dd>\n%s</dd>\n' % self.formattree(

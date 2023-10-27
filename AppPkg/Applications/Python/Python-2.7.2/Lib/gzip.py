@@ -88,13 +88,10 @@ class GzipFile(io.BufferedIOBase):
         if fileobj is None:
             fileobj = self.myfileobj = __builtin__.open(filename, mode or 'rb')
         if filename is None:
-            if hasattr(fileobj, 'name'): filename = fileobj.name
-            else: filename = ''
+            filename = fileobj.name if hasattr(fileobj, 'name') else ''
         if mode is None:
-            if hasattr(fileobj, 'mode'): mode = fileobj.mode
-            else: mode = 'rb'
-
-        if mode[0:1] == 'r':
+            mode = fileobj.mode if hasattr(fileobj, 'mode') else 'rb'
+        if mode[:1] == 'r':
             self.mode = READ
             # Set flag indicating start of a new member
             self._new_member = True
@@ -108,7 +105,7 @@ class GzipFile(io.BufferedIOBase):
             # Starts small, scales exponentially
             self.min_readsize = 100
 
-        elif mode[0:1] == 'w' or mode[0:1] == 'a':
+        elif mode[:1] in ['w', 'a']:
             self.mode = WRITE
             self._init_write(filename)
             self.compress = zlib.compressobj(compresslevel,
@@ -117,7 +114,7 @@ class GzipFile(io.BufferedIOBase):
                                              zlib.DEF_MEM_LEVEL,
                                              0)
         else:
-            raise IOError, "Mode " + mode + " not supported"
+            raise (IOError, f"Mode {mode} not supported")
 
         self.fileobj = fileobj
         self.offset = 0
@@ -131,12 +128,12 @@ class GzipFile(io.BufferedIOBase):
         import warnings
         warnings.warn("use the name attribute", DeprecationWarning, 2)
         if self.mode == WRITE and self.name[-3:] != ".gz":
-            return self.name + ".gz"
+            return f"{self.name}.gz"
         return self.name
 
     def __repr__(self):
         s = repr(self.fileobj)
-        return '<gzip ' + s[1:-1] + ' ' + hex(id(self)) + '>'
+        return f'<gzip {s[1:-1]} {hex(id(self))}>'
 
     def _check_closed(self):
         """Raises a ValueError if the underlying file object has been closed.
@@ -158,9 +155,7 @@ class GzipFile(io.BufferedIOBase):
         fname = os.path.basename(self.name)
         if fname.endswith(".gz"):
             fname = fname[:-3]
-        flags = 0
-        if fname:
-            flags = FNAME
+        flags = FNAME if fname else 0
         self.fileobj.write(chr(flags))
         mtime = self.mtime
         if mtime is None:
@@ -191,7 +186,7 @@ class GzipFile(io.BufferedIOBase):
         if flag & FEXTRA:
             # Read & discard the extra field, if present
             xlen = ord(self.fileobj.read(1))
-            xlen = xlen + 256*ord(self.fileobj.read(1))
+            xlen += 256*ord(self.fileobj.read(1))
             self.fileobj.read(xlen)
         if flag & FNAME:
             # Read and discard a null-terminated string containing the filename
@@ -246,15 +241,13 @@ class GzipFile(io.BufferedIOBase):
                     readsize = min(self.max_read_chunk, readsize * 2)
             except EOFError:
                 size = self.extrasize
-        else:               # just get some more of it
+        else:           # just get some more of it
             try:
                 while size > self.extrasize:
                     self._read(readsize)
                     readsize = min(self.max_read_chunk, readsize * 2)
             except EOFError:
-                if size > self.extrasize:
-                    size = self.extrasize
-
+                size = min(size, self.extrasize)
         offset = self.offset - self.extrastart
         chunk = self.extrabuf[offset: offset + size]
         self.extrasize = self.extrasize - size
@@ -413,7 +406,7 @@ class GzipFile(io.BufferedIOBase):
             if offset < self.offset:
                 raise IOError('Negative seek in write mode')
             count = offset - self.offset
-            for i in range(count // 1024):
+            for _ in range(count // 1024):
                 self.write(1024 * '\0')
             self.write((count % 1024) * '\0')
         elif self.mode == READ:
@@ -421,7 +414,7 @@ class GzipFile(io.BufferedIOBase):
                 # for negative seek, rewind and do positive seek
                 self.rewind()
             count = offset - self.offset
-            for i in range(count // 1024):
+            for _ in range(count // 1024):
                 self.read(1024)
             self.read(count % 1024)
 

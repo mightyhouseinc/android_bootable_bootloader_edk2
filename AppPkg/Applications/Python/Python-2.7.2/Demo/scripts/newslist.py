@@ -141,11 +141,8 @@ def makeleaf(tree,path):
 # to those groups beginning with <root>.
 
 def createpage(root, tree, p):
-    filename = os.path.join(pagedir, root+'.html')
-    if root == rootpage:
-        detail = ''
-    else:
-        detail = ' under ' + root
+    filename = os.path.join(pagedir, f'{root}.html')
+    detail = '' if root == rootpage else f' under {root}'
     with open(filename, 'w') as f:
         # f.write('Content-Type: text/html\n')
         f.write('<html>\n<head>\n')
@@ -156,8 +153,7 @@ def createpage(root, tree, p):
                 (httppref, rootpage))
         printtree(f, tree, 0, p)
         f.write('\n<p>')
-        f.write("<i>This page automatically created by 'newslist' v. %s." %
-                rcsrev)
+        f.write(f"<i>This page automatically created by 'newslist' v. {rcsrev}.")
         f.write(time.ctime(time.time()) + '</i>\n')
         f.write('</body>\n</html>\n')
 
@@ -170,8 +166,8 @@ def printtree(f, tree, indent, p):
 
     if l > sublistsize and indent > 0:
         # Create a new page and a link to it
-        f.write('<li><b><a href="%s%s.html">' % (httppref, p[1:]))
-        f.write(p[1:] + '.*')
+        f.write(f'<li><b><a href="{httppref}{p[1:]}.html">')
+        f.write(f'{p[1:]}.*')
         f.write('</a></b>%s\n' % pagelinkicon)
         createpage(p[1:], tree, p)
         return
@@ -191,14 +187,14 @@ def printtree(f, tree, indent, p):
     for i in kl:
         if i == '.':
             # Output a newsgroup
-            f.write('<li><a href="news:%s">%s</a> ' % (p[1:], p[1:]))
+            f.write(f'<li><a href="news:{p[1:]}">{p[1:]}</a> ')
             if p[1:] in desc:
                 f.write('     <i>%s</i>\n' % desc[p[1:]])
             else:
                 f.write('\n')
         else:
             # Output a hierarchy
-            printtree(f, tree[i], indent, p+'.'+i)
+            printtree(f, tree[i], indent, f'{p}.{i}')
 
     if l > 1:
         f.write('\n</ul>')
