@@ -149,12 +149,7 @@ class Set(Sized, Iterable, Container):
     def __le__(self, other):
         if not isinstance(other, Set):
             return NotImplemented
-        if len(self) > len(other):
-            return False
-        for elem in self:
-            if elem not in other:
-                return False
-        return True
+        return False if len(self) > len(other) else all(elem in other for elem in self)
 
     def __lt__(self, other):
         if not isinstance(other, Set):
@@ -162,14 +157,10 @@ class Set(Sized, Iterable, Container):
         return len(self) < len(other) and self.__le__(other)
 
     def __gt__(self, other):
-        if not isinstance(other, Set):
-            return NotImplemented
-        return other < self
+        return NotImplemented if not isinstance(other, Set) else other < self
 
     def __ge__(self, other):
-        if not isinstance(other, Set):
-            return NotImplemented
-        return other <= self
+        return NotImplemented if not isinstance(other, Set) else other <= self
 
     def __eq__(self, other):
         if not isinstance(other, Set):
@@ -194,10 +185,7 @@ class Set(Sized, Iterable, Container):
         return self._from_iterable(value for value in other if value in self)
 
     def isdisjoint(self, other):
-        for value in other:
-            if value in self:
-                return False
-        return True
+        return all(value not in self for value in other)
 
     def __or__(self, other):
         if not isinstance(other, Iterable):
@@ -397,21 +385,20 @@ class MappingView(Sized):
 class KeysView(MappingView, Set):
 
     @classmethod
-    def _from_iterable(self, it):
+    def _from_iterable(cls, it):
         return set(it)
 
     def __contains__(self, key):
         return key in self._mapping
 
     def __iter__(self):
-        for key in self._mapping:
-            yield key
+        yield from self._mapping
 
 
 class ItemsView(MappingView, Set):
 
     @classmethod
-    def _from_iterable(self, it):
+    def _from_iterable(cls, it):
         return set(it)
 
     def __contains__(self, item):
@@ -431,10 +418,7 @@ class ItemsView(MappingView, Set):
 class ValuesView(MappingView):
 
     def __contains__(self, value):
-        for key in self._mapping:
-            if value == self._mapping[key]:
-                return True
-        return False
+        return any(value == self._mapping[key] for key in self._mapping)
 
     def __iter__(self):
         for key in self._mapping:
@@ -482,8 +466,9 @@ class MutableMapping(Mapping):
 
     def update(*args, **kwds):
         if len(args) > 2:
-            raise TypeError("update() takes at most 2 positional "
-                            "arguments ({} given)".format(len(args)))
+            raise TypeError(
+                f"update() takes at most 2 positional arguments ({len(args)} given)"
+            )
         elif not args:
             raise TypeError("update() takes at least 1 argument (0 given)")
         self = args[0]
@@ -529,17 +514,13 @@ class Sequence(Sized, Iterable, Container):
         i = 0
         try:
             while True:
-                v = self[i]
-                yield v
+                yield self[i]
                 i += 1
         except IndexError:
             return
 
     def __contains__(self, value):
-        for v in self:
-            if v == value:
-                return True
-        return False
+        return any(v == value for v in self)
 
     def __reversed__(self):
         for i in reversed(range(len(self))):

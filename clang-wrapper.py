@@ -37,9 +37,7 @@ import os
 import sys
 import subprocess
 
-allowed_warnings = set([
-    "list.h:80",
- ])
+allowed_warnings = {"list.h:80"}
 
 # Capture the name of the object file, if can find it.
 ofile = None

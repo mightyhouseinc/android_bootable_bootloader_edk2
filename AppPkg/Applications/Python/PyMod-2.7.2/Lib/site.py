@@ -115,7 +115,7 @@ def removeduppaths():
         # if they only differ in case); turn relative paths into absolute
         # paths.
         dir, dircase = makepath(dir)
-        if not dircase in known_paths:
+        if dircase not in known_paths:
             L.append(dir)
             known_paths.add(dircase)
     sys.path[:] = L
@@ -185,13 +185,13 @@ def addsitedir(sitedir, known_paths=None):
     else:
         reset = 0
     sitedir, sitedircase = makepath(sitedir)
-    if not sitedircase in known_paths:
+    if sitedircase not in known_paths:
         sys.path.append(sitedir)        # Add path component
     try:
         names = os.listdir(sitedir)
     except os.error:
         return
-    dotpth = os.extsep + "pth"
+    dotpth = f"{os.extsep}pth"
     names = [name for name in names if name.endswith(dotpth)]
     for name in sorted(names):
         addpackage(sitedir, name, known_paths)
@@ -253,7 +253,7 @@ def getusersitepackages():
     from sysconfig import get_path
     import os
 
-    USER_SITE = get_path('purelib', '%s_user' % os.name)
+    USER_SITE = get_path('purelib', f'{os.name}_user')
     return USER_SITE
 
 def addusersitepackages(known_paths):
@@ -286,10 +286,17 @@ def getsitepackages():
             continue
         seen.add(prefix)
 
-        sitepackages.append(os.path.join(prefix, "lib",
-                                    "python." + sys.version[0] + sys.version[2],
-                                    "site-packages"))
-        sitepackages.append(os.path.join(prefix, "lib", "site-python"))
+        sitepackages.extend(
+            (
+                os.path.join(
+                    prefix,
+                    "lib",
+                    f"python.{sys.version[0]}{sys.version[2]}",
+                    "site-packages",
+                ),
+                os.path.join(prefix, "lib", "site-python"),
+            )
+        )
     return sitepackages
 
 def addsitepackages(known_paths):
@@ -326,11 +333,15 @@ def setquit():
     """
     eof = 'Ctrl-D (i.e. EOF)'
 
+
+
     class Quitter(object):
         def __init__(self, name):
             self.name = name
+
         def __repr__(self):
-            return 'Use %s() or %s to exit' % (self.name, eof)
+            return f'Use {self.name}() or {eof} to exit'
+
         def __call__(self, code=None):
             # Shells like IDLE catch the SystemExit, but listen when their
             # stdin wrapper is closed.
@@ -339,6 +350,8 @@ def setquit():
             except:
                 pass
             raise SystemExit(code)
+
+
     __builtin__.quit = Quitter('quit')
     __builtin__.exit = Quitter('exit')
 
@@ -457,16 +470,6 @@ def setencoding():
     default is 'ascii', but if you're willing to experiment, you can
     change this."""
     encoding = "ascii" # Default value set by _PyUnicode_Init()
-    if 0:
-        # Enable to support locale aware default string encodings.
-        import locale
-        loc = locale.getdefaultlocale()
-        if loc[1]:
-            encoding = loc[1]
-    if 0:
-        # Enable to switch off string to Unicode coercion and implicit
-        # Unicode to string conversion.
-        encoding = "undefined"
     if encoding != "ascii":
         # On Non-Unicode builds this will raise an AttributeError...
         sys.setdefaultencoding(encoding) # Needs Python Unicode build !

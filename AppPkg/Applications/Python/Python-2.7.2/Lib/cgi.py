@@ -98,10 +98,7 @@ def initlog(*allargs):
             logfp = open(logfile, "a")
         except IOError:
             pass
-    if not logfp:
-        log = nolog
-    else:
-        log = dolog
+    log = nolog if not logfp else dolog
     log(*allargs)
 
 def dolog(fmt, *args):
@@ -144,7 +141,7 @@ def parse(fp=None, environ=os.environ, keep_blank_values=0, strict_parsing=0):
     """
     if fp is None:
         fp = sys.stdin
-    if not 'REQUEST_METHOD' in environ:
+    if 'REQUEST_METHOD' not in environ:
         environ['REQUEST_METHOD'] = 'GET'       # For testing stand-alone
     if environ['REQUEST_METHOD'] == 'POST':
         ctype, pdict = parse_header(environ['CONTENT_TYPE'])
@@ -158,19 +155,18 @@ def parse(fp=None, environ=os.environ, keep_blank_values=0, strict_parsing=0):
         else:
             qs = ''                     # Unknown content-type
         if 'QUERY_STRING' in environ:
-            if qs: qs = qs + '&'
+            if qs:
+                qs = f'{qs}&'
             qs = qs + environ['QUERY_STRING']
         elif sys.argv[1:]:
-            if qs: qs = qs + '&'
+            if qs:
+                qs = f'{qs}&'
             qs = qs + sys.argv[1]
         environ['QUERY_STRING'] = qs    # XXX Shouldn't, really
     elif 'QUERY_STRING' in environ:
         qs = environ['QUERY_STRING']
     else:
-        if sys.argv[1:]:
-            qs = sys.argv[1]
-        else:
-            qs = ""
+        qs = sys.argv[1] if sys.argv[1:] else ""
         environ['QUERY_STRING'] = qs    # XXX Shouldn't, really
     return urlparse.parse_qs(qs, keep_blank_values, strict_parsing)
 
@@ -216,15 +212,13 @@ def parse_multipart(fp, pdict):
     since it can call parse_multipart().
 
     """
-    boundary = ""
-    if 'boundary' in pdict:
-        boundary = pdict['boundary']
+    boundary = pdict['boundary'] if 'boundary' in pdict else ""
     if not valid_boundary(boundary):
         raise ValueError,  ('Invalid boundary in multipart form: %r'
                             % (boundary,))
 
-    nextpart = "--" + boundary
-    lastpart = "--" + boundary + "--"
+    nextpart = f"--{boundary}"
+    lastpart = f"--{boundary}--"
     partdict = {}
     terminator = ""
 
@@ -234,8 +228,7 @@ def parse_multipart(fp, pdict):
         if terminator:
             # At start of next part.  Read headers first.
             headers = mimetools.Message(fp)
-            clength = headers.getheader('content-length')
-            if clength:
+            if clength := headers.getheader('content-length'):
                 try:
                     bytes = int(clength)
                 except ValueError:
@@ -307,7 +300,7 @@ def parse_header(line):
     Return the main content-type and a dictionary of options.
 
     """
-    parts = _parseparam(';' + line)
+    parts = _parseparam(f';{line}')
     key = parts.next()
     pdict = {}
     for p in parts:
@@ -428,7 +421,7 @@ class FieldStorage:
         if 'REQUEST_METHOD' in environ:
             method = environ['REQUEST_METHOD'].upper()
         self.qs_on_post = None
-        if method == 'GET' or method == 'HEAD':
+        if method in ['GET', 'HEAD']:
             if 'QUERY_STRING' in environ:
                 qs = environ['QUERY_STRING']
             elif sys.argv[1:]:
@@ -534,54 +527,45 @@ class FieldStorage:
         """Dictionary style indexing."""
         if self.list is None:
             raise TypeError, "not indexable"
-        found = []
-        for item in self.list:
-            if item.name == key: found.append(item)
-        if not found:
-            raise KeyError, key
-        if len(found) == 1:
-            return found[0]
+        if found := [item for item in self.list if item.name == key]:
+            return found[0] if len(found) == 1 else found
         else:
-            return found
+            raise KeyError, key
 
     def getvalue(self, key, default=None):
         """Dictionary style get() method, including 'value' lookup."""
-        if key in self:
-            value = self[key]
-            if type(value) is type([]):
-                return map(attrgetter('value'), value)
-            else:
-                return value.value
-        else:
+        if key not in self:
             return default
+        value = self[key]
+        return (
+            map(attrgetter('value'), value)
+            if type(value) is type([])
+            else value.value
+        )
 
     def getfirst(self, key, default=None):
         """ Return the first value received."""
-        if key in self:
-            value = self[key]
-            if type(value) is type([]):
-                return value[0].value
-            else:
-                return value.value
-        else:
+        if key not in self:
             return default
+        value = self[key]
+        return value[0].value if type(value) is type([]) else value.value
 
     def getlist(self, key):
         """ Return list of received values."""
-        if key in self:
-            value = self[key]
-            if type(value) is type([]):
-                return map(attrgetter('value'), value)
-            else:
-                return [value.value]
-        else:
+        if key not in self:
             return []
+        value = self[key]
+        return (
+            map(attrgetter('value'), value)
+            if type(value) is type([])
+            else [value.value]
+        )
 
     def keys(self):
         """Dictionary style keys() method."""
         if self.list is None:
             raise TypeError, "not indexable"
-        return list(set(item.name for item in self.list))
+        return list({item.name for item in self.list})
 
     def has_key(self, key):
         """Dictionary style has_key() method."""
@@ -606,11 +590,14 @@ class FieldStorage:
         """Internal: read data in query string format."""
         qs = self.fp.read(self.length)
         if self.qs_on_post:
-            qs += '&' + self.qs_on_post
+            qs += f'&{self.qs_on_post}'
         self.list = list = []
-        for key, value in urlparse.parse_qsl(qs, self.keep_blank_values,
-                                            self.strict_parsing):
-            list.append(MiniFieldStorage(key, value))
+        list.extend(
+            MiniFieldStorage(key, value)
+            for key, value in urlparse.parse_qsl(
+                qs, self.keep_blank_values, self.strict_parsing
+            )
+        )
         self.skip_lines()
 
     FieldStorageClass = None
@@ -622,9 +609,12 @@ class FieldStorage:
             raise ValueError, 'Invalid boundary in multipart form: %r' % (ib,)
         self.list = []
         if self.qs_on_post:
-            for key, value in urlparse.parse_qsl(self.qs_on_post,
-                                self.keep_blank_values, self.strict_parsing):
-                self.list.append(MiniFieldStorage(key, value))
+            self.list.extend(
+                MiniFieldStorage(key, value)
+                for key, value in urlparse.parse_qsl(
+                    self.qs_on_post, self.keep_blank_values, self.strict_parsing
+                )
+            )
             FieldStorageClass = None
 
         klass = self.FieldStorageClass or self.__class__
@@ -689,8 +679,8 @@ class FieldStorage:
 
     def read_lines_to_outerboundary(self):
         """Internal: read lines until outerboundary."""
-        next = "--" + self.outerboundary
-        last = next + "--"
+        next = f"--{self.outerboundary}"
+        last = f"{next}--"
         delim = ""
         last_line_lfend = True
         while 1:
@@ -723,8 +713,8 @@ class FieldStorage:
         """Internal: skip lines until outer boundary if defined."""
         if not self.outerboundary or self.done:
             return
-        next = "--" + self.outerboundary
-        last = next + "--"
+        next = f"--{self.outerboundary}"
+        last = f"{next}--"
         last_line_lfend = True
         while 1:
             line = self.fp.readline(1<<16)
@@ -857,22 +847,17 @@ class InterpFormContentDict(SvFormContentDict):
 class FormContent(FormContentDict):
     """This class is present for backwards compatibility only."""
     def values(self, key):
-        if key in self.dict :return self.dict[key]
-        else: return None
+        return self.dict[key] if key in self.dict else None
     def indexed_value(self, key, location):
         if key in self.dict:
-            if len(self.dict[key]) > location:
-                return self.dict[key][location]
-            else: return None
+            return self.dict[key][location] if len(self.dict[key]) > location else None
         else: return None
     def value(self, key):
-        if key in self.dict: return self.dict[key][0]
-        else: return None
+        return self.dict[key][0] if key in self.dict else None
     def length(self, key):
         return len(self.dict[key])
     def stripped(self, key):
-        if key in self.dict: return self.dict[key][0].strip()
-        else: return None
+        return self.dict[key][0].strip() if key in self.dict else None
     def pars(self):
         return self.dict
 
